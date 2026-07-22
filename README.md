@@ -1,4 +1,4 @@
-# Best AI Detector
+# Best AI Text Detector
 
 <p align="center">
   <img src="assets/hero.svg" alt="AI Detector Skill hero" width="100%" />
