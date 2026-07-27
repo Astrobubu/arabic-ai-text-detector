@@ -66,6 +66,44 @@ def test_arabic_ai_like_sample_scores_higher_than_arabic_human_like_sample():
     assert ai_result.score > human_result.score
 
 
+def test_arabic_literary_ai_essay_is_not_confidently_read_as_human():
+    # Regression test for a real false negative: a polished, high-vocabulary AI-generated
+    # Arabic essay ("رحلة المدن قبل استيقاظ سكانها") that early heuristics confidently scored
+    # as low_ai_likelihood (19/100). It has none of the blunt chatbot-register marker phrases,
+    # but does show suspiciously uniform paragraph lengths and repeated rhetorical clause-opener
+    # parallelism ("عندما... وعندما... وعندما...") - this must not read as confidently human.
+    text = (
+        "قبل أن يرنّ المنبّه في الغرف المغلقة، وقبل أن تمتلئ الشوارع بأصوات السيارات، تكون "
+        "المدينة قد بدأت يومها بالفعل. عامل المخبز يشعل الفرن، وسائق الحافلة يتفقّد طريقه، "
+        "وحارس المبنى يفتح البوابة ببطء كأنه يوقظ المكان من نومه.\n\n"
+        "في تلك الساعة المبكرة، تبدو الأرصفة أوسع، والهواء أخف، والإشارات الضوئية أكثر صبرًا. "
+        "لا أحد يركض خلف موعد، ولا أحد ينظر إلى هاتفه كل بضع ثوانٍ. حتى القطط التي تتجوّل قرب "
+        "المطاعم المغلقة تتحرك بثقة، وكأن المدينة ملك لها حتى وصول البشر.\n\n"
+        "يعتقد كثيرون أن المدن مجرد مبانٍ وطرق ومحلات، لكنها في الحقيقة مجموعة من العادات "
+        "الصغيرة. صوت الملعقة داخل كوب الشاي، رائحة الخبز عند الفجر، باب متجر يُرفع كل صباح، "
+        "وتحيات قصيرة تتكرر بين أشخاص لا يعرف أحدهم اسم الآخر.\n\n"
+        "ومع مرور الوقت، تصبح هذه التفاصيل جزءًا من ذاكرة المكان. قد يُهدم مبنى قديم، أو يتغير "
+        "اسم شارع، أو يُغلق مقهى اعتاد الناس الجلوس فيه، لكن الشعور الذي تركته تلك الأماكن يبقى "
+        "حاضرًا. أحيانًا تكفي رائحة معينة أو أغنية بعيدة لإعادة مدينة كاملة إلى الذاكرة.\n\n"
+        "ربما لهذا السبب نشعر بالغربة حين تزورنا مدينة جديدة. نحن لا نبحث فقط عن طريق أو عنوان، "
+        "بل نحاول اكتشاف إيقاع المكان. نراقب طريقة الناس في المشي، وأوقات ازدحام المقاهي، "
+        "والأصوات التي تخرج من النوافذ، حتى نفهم كيف تتنفس المدينة.\n\n"
+        "وفي النهاية، لا تصبح المدينة مألوفة عندما نحفظ شوارعها، بل عندما نبدأ في صناعة عاداتنا "
+        "داخلها. عندما يعرف البائع طلبنا المعتاد، وعندما نجد طريقًا نحبه أكثر من الطريق الأسرع، "
+        "وعندما نشعر أن زاوية صغيرة من هذا المكان أصبحت تخصّنا."
+    )
+
+    result = analyze_text(text)
+
+    assert result.language == "ar"
+    assert result.verdict != "low_ai_likelihood"
+    assert result.score >= 45
+
+    signal_names = {s.name for s in result.signals}
+    assert "parallel_structure" in signal_names
+    assert "paragraph_uniformity" in signal_names
+
+
 def test_result_dict_contains_public_contract_fields():
     text = " ".join([
         "This paragraph has enough words to exercise the public result contract.",

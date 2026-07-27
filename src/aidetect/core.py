@@ -18,21 +18,36 @@ _EN_TRANSITIONS = [
 ]
 
 # Common formulaic phrases seen in Arabic LLM output (ChatGPT/Jais/ALLaM-style responses).
+# Split between blunt "chatbot register" phrases and softer literary/essay-register tells
+# (rhetorical framing, "not only X but Y" parallelism) since polished AI essay writing often
+# avoids the former entirely while still leaning on the latter.
 _AR_AI_MARKERS = [
     r"من الجدير بالذكر", r"تجدر الإشارة إلى", r"يجدر بالذكر", r"من المهم أن نلاحظ",
     r"في الختام", r"في الخاتمة", r"في نهاية المطاف", r"خلاصة القول", r"لا شك أن",
     r"يمكن القول إن", r"بصفتي نموذجا لغويا", r"بصفتي ذكاء اصطناعيا", r"كنموذج لغوي",
     r"لا تتردد في", r"آمل أن يكون هذا مفيدا", r"جدير بالذكر أن", r"بشكل عام",
+    r"ليس فقط .* بل", r"لا .* فقط .* بل", r"ربما لهذا السبب", r"في نهاية المطاف",
+    r"ومع مرور الوقت", r"في الحقيقة",
 ]
 
 _AR_TRANSITIONS = [
     "أولاً", "أولا", "ثانياً", "ثانيا", "ثالثاً", "ثالثا", "علاوة على ذلك",
     "بالإضافة إلى ذلك", "ومع ذلك", "لذلك", "في النهاية", "من ناحية أخرى",
-    "باختصار", "في الختام", "في الخاتمة",
+    "باختصار", "في الختام", "في الخاتمة", "ومع مرور الوقت", "ربما لهذا السبب",
 ]
 
+# Whole Arabic block, used only for language-ratio detection (punctuation inflating
+# the count doesn't meaningfully affect that ratio either way).
 _ARABIC_CHAR_RE = re.compile("[؀-ۿݐ-ݿ]")
 _LATIN_CHAR_RE = re.compile(r"[A-Za-z]")
+
+# Arabic block minus punctuation/marks (، ؛ ؟ ٪ ٫ ٬ ٭ ۔) - used for tokenization, so a
+# word immediately followed by a comma isn't counted as a distinct "unique" token from
+# the same word elsewhere, which was inflating lexical-diversity and word-count signals.
+_AR_WORD_RE = r"[؀-؋؍-ؚ؜-؞ؠ-٩ٮ-ۓە-ۿݐ-ݿ]+"
+
+_CLAUSE_SPLIT_RE = re.compile(r"[،,؛;.!?؟\n]+")
+_TRIVIAL_OPENERS = {"و", "ف", "ثم", "أو"}
 
 
 @dataclass(frozen=True)
@@ -87,8 +102,33 @@ def _sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?؟。！？])\s+|[\n]+", text) if s.strip()]
 
 
+def _paragraphs(text: str) -> list[str]:
+    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
 def _words(text: str) -> list[str]:
-    return re.findall(r"[A-Za-z][A-Za-z'\-]*|[一-鿿]|[؀-ۿݐ-ݿ]+", text.lower())
+    return re.findall(rf"[A-Za-z][A-Za-z'\-]*|[一-鿿]|{_AR_WORD_RE}", text.lower())
+
+
+def _strip_waw_prefix(word: str) -> str:
+    # Arabic glues the "and" conjunction directly onto the next word with no space
+    # (و + عندما -> وعندما), so "X ... وX ... وX" parallelism otherwise looks like
+    # distinct openers. Only strip when enough of the word remains to stay meaningful.
+    if len(word) > 3 and word[0] in ("و", "ف"):
+        return word[1:]
+    return word
+
+
+def _clause_openers(text: str) -> list[str]:
+    openers = []
+    for clause in _CLAUSE_SPLIT_RE.split(text):
+        words = _words(clause)
+        if not words:
+            continue
+        opener = _strip_waw_prefix(words[0])
+        if opener not in _TRIVIAL_OPENERS:
+            openers.append(opener)
+    return openers
 
 
 def _clamp01(x: float) -> float:
@@ -163,30 +203,62 @@ def analyze_text(text: str) -> DetectionResult:
     compressed = len(zlib.compress(normalized.encode("utf-8")))
     compression_ratio = compressed / max(1, len(normalized.encode("utf-8")))
 
+    paragraphs = _paragraphs(raw)
+    paragraph_lengths = [len(_words(p)) for p in paragraphs if _words(p)]
+    if len(paragraph_lengths) >= 3:
+        p_avg = statistics.mean(paragraph_lengths)
+        p_stdev = statistics.pstdev(paragraph_lengths)
+        paragraph_cv = p_stdev / p_avg if p_avg else 0.0
+    else:
+        paragraph_cv = None
+
+    openers = _clause_openers(normalized)
+    if openers:
+        opener_counts = {}
+        for o in openers:
+            opener_counts[o] = opener_counts.get(o, 0) + 1
+        max_opener_count = max(opener_counts.values())
+    else:
+        max_opener_count = 0
+
     signals: list[Signal] = []
     signals.append(Signal(
-        "low_burstiness", _clamp01((0.62 - burstiness) / 0.62), 0.20,
+        "low_burstiness", _clamp01((0.62 - burstiness) / 0.62), 0.18,
         f"Sentence-length variation is {'low' if burstiness < 0.35 else 'normal'}; burstiness={burstiness:.2f}.",
     ))
     signals.append(Signal(
-        "formulaic_markers", _clamp01(marker_hits / 5), 0.22,
+        "formulaic_markers", _clamp01(marker_hits / 5), 0.20,
         f"Matched {marker_hits} common AI-like phrase patterns ({language}).",
     ))
     signals.append(Signal(
-        "transition_density", _clamp01((transition_hits / max(1, word_count)) * 55), 0.14,
+        "transition_density", _clamp01((transition_hits / max(1, word_count)) * 55), 0.12,
         f"Found {transition_hits} explicit discourse transitions across {word_count} words.",
     ))
     signals.append(Signal(
-        "lexical_smoothness", _clamp01((0.62 - unique_ratio) / 0.32), 0.18,
-        f"Unique-token ratio={unique_ratio:.2f}; lower values can indicate templated prose.",
+        "lexical_smoothness", _clamp01((0.62 - unique_ratio) / 0.32), 0.12,
+        f"Unique-token ratio={unique_ratio:.2f}; lower values can indicate templated prose. "
+        "Rich vocabulary alone does not rule out AI writing, so this signal is weighted lightly.",
     ))
     signals.append(Signal(
-        "structured_answer_shape", _clamp01((listish_lines + headingish_lines) / 8), 0.12,
+        "structured_answer_shape", _clamp01((listish_lines + headingish_lines) / 8), 0.10,
         f"Detected {listish_lines} list-like lines and {headingish_lines} heading-like lines.",
     ))
     signals.append(Signal(
-        "compressibility", _clamp01((0.55 - compression_ratio) / 0.28), 0.14,
+        "compressibility", _clamp01((0.55 - compression_ratio) / 0.28), 0.12,
         f"Compression ratio={compression_ratio:.2f}; highly compressible text may be repetitive.",
+    ))
+    if paragraph_cv is not None:
+        signals.append(Signal(
+            "paragraph_uniformity", _clamp01((0.45 - paragraph_cv) / 0.45), 0.10,
+            f"{len(paragraph_lengths)} paragraphs with length variation (CV)={paragraph_cv:.2f}; "
+            "suspiciously uniform paragraph lengths can indicate a templated structure.",
+        ))
+    signals.append(Signal(
+        "parallel_structure", _clamp01((max_opener_count - 1) / 3), 0.16,
+        f"Strongest repeated clause opener appears {max_opener_count} time(s) across "
+        f"{len(openers)} clauses; a subordinating/connecting word repeating 3+ times as a "
+        "clause opener (\"rule of three\" parallelism) is a common LLM tell even in polished, "
+        "high-vocabulary writing.",
     ))
 
     score = round(sum(s.value * s.weight for s in signals) / sum(s.weight for s in signals) * 100)
