@@ -126,9 +126,8 @@ async function runScreenshotDemo(outPath) {
       ta.dispatchEvent(new Event('input'));
     })();
   `);
-  if (process.argv.includes('--lang-en')) {
-    await mainWindow.webContents.executeJavaScript(`document.getElementById('lang-toggle').click();`);
-  }
+  const demoLang = process.argv.includes('--lang-en') ? 'en' : 'ar';
+  await mainWindow.webContents.executeJavaScript(`window.__aidetectSetLang(${JSON.stringify(demoLang)});`);
   if (process.argv.includes('--theme-light')) {
     await mainWindow.webContents.executeJavaScript(`document.getElementById('theme-toggle').click();`);
   }
@@ -142,11 +141,16 @@ async function runScreenshotDemo(outPath) {
     if (done) break;
     await new Promise((r) => setTimeout(r, 500));
   }
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 1500));
 
-  const image = await mainWindow.webContents.capturePage();
-  await fs.writeFile(outPath, image.toPNG());
-  console.log('SCREENSHOT_SAVED ' + outPath);
+  let png = Buffer.alloc(0);
+  for (let attempt = 0; attempt < 5 && png.length === 0; attempt++) {
+    const image = await mainWindow.webContents.capturePage();
+    png = image.toPNG();
+    if (png.length === 0) await new Promise((r) => setTimeout(r, 700));
+  }
+  await fs.writeFile(outPath, png);
+  console.log(`SCREENSHOT_SAVED ${outPath} (${png.length} bytes)`);
   setTimeout(() => app.quit(), 300);
 }
 

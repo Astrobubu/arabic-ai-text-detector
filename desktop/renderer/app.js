@@ -7,7 +7,7 @@ let selectedFile = null;
 const els = {};
 ['engine-status', 'engine-status-text', 'analyze-btn', 'analyze-hint', 'text-input',
  'dropzone', 'file-input', 'browse-btn', 'file-name', 'results-panel', 'report-root',
- 'export-pdf-btn', 'use-ml', 'lang-toggle', 'theme-toggle', 'top-progress',
+ 'export-pdf-btn', 'lang-toggle', 'theme-toggle', 'top-progress',
  'analyze-progress', 'analyze-progress-label'].forEach((id) => {
   els[id] = document.getElementById(id);
 });
@@ -61,6 +61,8 @@ function currentThemeIsDark() {
   if (explicit) return explicit === 'dark';
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
+
+window.__aidetectSetLang = applyLanguage; // used by main.js's --screenshot demo harness
 
 els['lang-toggle'].addEventListener('click', () => applyLanguage(currentLang === 'ar' ? 'en' : 'ar'));
 els['theme-toggle'].addEventListener('click', () => applyTheme(currentThemeIsDark() ? 'light' : 'dark'));
@@ -131,7 +133,6 @@ function stopProgress() {
 
 els['analyze-btn'].addEventListener('click', async () => {
   els['analyze-hint'].textContent = '';
-  const useMl = els['use-ml'].checked;
 
   if (!selectedFile && !els['text-input'].value.trim()) {
     els['analyze-hint'].textContent = t('analyzeHintEmpty');
@@ -146,14 +147,14 @@ els['analyze-btn'].addEventListener('click', async () => {
     if (selectedFile) {
       const form = new FormData();
       form.append('file', selectedFile);
-      const resp = await fetch(apiUrl(`/api/analyze/file?use_ml=${useMl}`), { method: 'POST', body: form });
+      const resp = await fetch(apiUrl('/api/analyze/file?use_ml=true'), { method: 'POST', body: form });
       if (!resp.ok) throw new Error((await resp.json()).detail || `Server error ${resp.status}`);
       report = await resp.json();
     } else {
       const resp = await fetch(apiUrl('/api/analyze/text'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: els['text-input'].value, use_ml: useMl }),
+        body: JSON.stringify({ text: els['text-input'].value, use_ml: true }),
       });
       if (!resp.ok) throw new Error((await resp.json()).detail || `Server error ${resp.status}`);
       report = await resp.json();
@@ -188,6 +189,28 @@ function agreementText(agreement) {
   return TRANSLATIONS[currentLang].agreementLabels[agreement] ?? agreement;
 }
 
+function signalName(name) {
+  return TRANSLATIONS[currentLang].signalNames?.[name] ?? name.replace(/_/g, ' ');
+}
+
+function signalNote(signal) {
+  const pair = TRANSLATIONS[currentLang].signalNotes?.[signal.name];
+  if (!pair) return signal.note;
+  return pair[signal.value >= 0.5 ? 0 : 1];
+}
+
+function caveatText(text) {
+  return TRANSLATIONS[currentLang].caveatMap?.[text] ?? text;
+}
+
+function mlLabelText(label) {
+  return TRANSLATIONS[currentLang].mlLabelMap?.[label] ?? label;
+}
+
+function confidenceText(confidence) {
+  return TRANSLATIONS[currentLang].confidenceMap?.[confidence] ?? confidence;
+}
+
 function renderReport(report) {
   const h = report.heuristic;
   const ml = report.ml;
@@ -197,9 +220,9 @@ function renderReport(report) {
     .sort((a, b) => (b.value * b.weight) - (a.value * a.weight))
     .map((s) => `
       <tr>
-        <td>${escapeHtml(s.name.replace(/_/g, ' '))}</td>
+        <td>${escapeHtml(signalName(s.name))}</td>
         <td>${(s.value * s.weight).toFixed(2)}</td>
-        <td dir="auto">${escapeHtml(s.note)}</td>
+        <td dir="auto">${escapeHtml(signalNote(s))}</td>
       </tr>`)
     .join('');
 
@@ -207,7 +230,7 @@ function renderReport(report) {
     ? `
       <div class="badge-row">
         <div class="badge">${t('model')}<b>${escapeHtml(ml.model_id)}</b></div>
-        <div class="badge">${t('label')}<b>${escapeHtml(ml.label)}</b></div>
+        <div class="badge">${t('label')}<b>${escapeHtml(mlLabelText(ml.label))}</b></div>
         <div class="badge">${t('aiProbability')}<b>${(ml.ai_probability * 100).toFixed(0)}%</b></div>
       </div>`
     : `<div class="not-available">${t('notAvailable')}${escapeHtml(ml.note)}</div>`;
@@ -234,7 +257,7 @@ function renderReport(report) {
           <h3>${t('exhibitATitle')}</h3>
           <div class="badge-row">
             <div class="badge">${t('score')}<b>${h.score}/100</b></div>
-            <div class="badge">${t('confidence')}<b>${escapeHtml(h.confidence)}</b></div>
+            <div class="badge">${t('confidence')}<b>${escapeHtml(confidenceText(h.confidence))}</b></div>
           </div>
           <table class="signals" style="margin-top:12px">
             <tbody>${signalsRows}</tbody>
@@ -250,8 +273,8 @@ function renderReport(report) {
 
       <div class="card">
         <h3>${t('caveats')}</h3>
-        <ul class="caveats">${report.caveats.map((c) => `<li dir="auto">${escapeHtml(c)}</li>`).join('')}</ul>
-        ${h.next_steps.length ? `<h3 style="margin-top:14px">${t('nextSteps')}</h3><ul class="next-steps">${h.next_steps.map((s) => `<li dir="auto">${escapeHtml(s)}</li>`).join('')}</ul>` : ''}
+        <ul class="caveats">${report.caveats.map((c) => `<li dir="auto">${escapeHtml(caveatText(c))}</li>`).join('')}</ul>
+        ${h.next_steps.length ? `<h3 style="margin-top:14px">${t('nextSteps')}</h3><ul class="next-steps">${h.next_steps.map((s) => `<li dir="auto">${escapeHtml(caveatText(s))}</li>`).join('')}</ul>` : ''}
       </div>
 
       <div class="meta-grid">
