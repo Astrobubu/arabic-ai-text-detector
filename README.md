@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/lynote-ai/ai-text-detector/actions/workflows/ci.yml"><img src="https://github.com/lynote-ai/ai-text-detector/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Astrobubu/arabic-ai-text-detector/actions/workflows/ci.yml"><img src="https://github.com/Astrobubu/arabic-ai-text-detector/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/python-3.9%2B-3776ab" alt="Python 3.9+" />
   <img src="https://img.shields.io/badge/license-MIT-16a34a" alt="MIT License" />
   <img src="https://img.shields.io/badge/network-none-f59e0b" alt="No Network" />
@@ -36,7 +36,7 @@ This project is intentionally modest. It estimates **AI-like signals**, not proo
   Same engine, same report - the desktop app's UI is fully bilingual (not just the input box),
   with real RTL layout for Arabic and a light/dark theme toggle.
   <br />
-  <b><a href="https://github.com/lynote-ai/ai-text-detector/releases/latest">⬇ Download the Windows desktop app</a></b>
+  <b><a href="https://github.com/Astrobubu/arabic-ai-text-detector/releases/latest">⬇ Download the Windows desktop app</a></b>
   (single installer, no Python/Node required, runs fully offline after install)
 </p>
 
