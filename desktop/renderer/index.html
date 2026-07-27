@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>AI Text Detector</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="top-progress" class="no-print" hidden></div>
+
+  <header class="no-print">
+    <div class="brand">
+      <div class="brand-mark">AI</div>
+      <div>
+        <h1 data-i18n="appTitle">Loading…</h1>
+        <p class="subtitle" data-i18n="appSubtitle"></p>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div id="engine-status" class="engine-status starting">
+        <span class="dot"></span>
+        <span id="engine-status-text" data-i18n="engineStarting"></span>
+      </div>
+      <button id="lang-toggle" class="icon-btn" type="button" title="Language">EN</button>
+      <button id="theme-toggle" class="icon-btn" type="button" title="Theme">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel no-print" id="input-panel">
+      <div class="panel-header">
+        <h2 data-i18n="step1"></h2>
+        <label class="toggle">
+          <input type="checkbox" id="use-ml" checked />
+          <span data-i18n="useMl"></span>
+        </label>
+      </div>
+
+      <textarea id="text-input" dir="auto" data-i18n-placeholder="textPlaceholder"></textarea>
+
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept=".txt,.docx,.pdf" hidden />
+        <p><strong data-i18n="dropTitle"></strong> <span data-i18n="dropOr"></span> <button type="button" id="browse-btn" class="link-btn" data-i18n="browse"></button></p>
+        <p class="hint" id="file-name"></p>
+      </div>
+
+      <div class="actions">
+        <button id="analyze-btn" class="primary" disabled data-i18n="analyze"></button>
+        <div id="analyze-progress" class="analyze-progress" hidden>
+          <div class="analyze-progress-track"></div>
+          <div id="analyze-progress-label" class="analyze-progress-label"></div>
+        </div>
+        <span id="analyze-hint" class="hint"></span>
+      </div>
+    </section>
+
+    <section class="panel" id="results-panel" hidden>
+      <div class="panel-header no-print">
+        <h2 data-i18n="step2"></h2>
+        <button id="export-pdf-btn" class="secondary" data-i18n="exportPdf"></button>
+      </div>
+
+      <div id="report-root"></div>
+    </section>
+  </main>
+
+  <footer class="no-print">
+    <p data-i18n="footerDisclaimer"></p>
+  </footer>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

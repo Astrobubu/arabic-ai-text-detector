@@ -1,4 +1,4 @@
-from aidetect import analyze_text
+from aidetect import analyze_text, detect_language
 
 
 def test_short_text_is_insufficient():
@@ -38,6 +38,32 @@ def test_ai_like_sample_scores_higher_than_human_like_sample():
     ] * 16)
 
     assert analyze_text(ai_like).score > analyze_text(human_like).score
+
+
+def test_detect_language_identifies_arabic_english_and_mixed():
+    assert detect_language("هذا نص عربي بالكامل وليس فيه أي كلمات أجنبية على الإطلاق") == "ar"
+    assert detect_language("This is a fully English sentence with no other script at all.") == "en"
+    assert detect_language("This sentence has بعض الكلمات العربية mixed in with English words too") == "mixed"
+
+
+def test_arabic_ai_like_sample_scores_higher_than_arabic_human_like_sample():
+    ai_like_ar = " ".join([
+        "من الجدير بالذكر أن هذا الموضوع يحظى باهتمام كبير في الآونة الأخيرة والعصر الحالي.",
+        "علاوة على ذلك فإن التحليل الشامل يوضح أهمية النهج المتكامل في معالجة القضية المطروحة.",
+        "وفي الختام يمكن القول إن هذا الأمر يمثل شهادة على أهمية التخطيط الدقيق والتنفيذ المنظم.",
+    ] * 12)
+    human_like_ar = " ".join([
+        "خرجت من الاجتماع وفي يدي ورقة فيها ثلاث ملاحظات متعثرة وأثر كوب قهوة على الحافة.",
+        "الفكرة بدت ذكية داخل الغرفة لكنها انهارت لما سأل أحمد مين اللي رح يكمل عليها بعدين.",
+        "تجادلنا لعشر دقايق وشطبنا افتراضين وخلينا بس الحل الممل اللي فعلا رح ينفذ.",
+    ] * 12)
+
+    ai_result = analyze_text(ai_like_ar)
+    human_result = analyze_text(human_like_ar)
+
+    assert ai_result.language == "ar"
+    assert human_result.language == "ar"
+    assert ai_result.score > human_result.score
 
 
 def test_result_dict_contains_public_contract_fields():

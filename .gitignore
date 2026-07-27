@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Local model cache (fetched by scripts/prefetch_models.py, not committed)
+model_cache/
+
+# Node / Electron
+desktop/node_modules/
+desktop/dist/
+desktop/backend-dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / local config
+mcp.json
+.env

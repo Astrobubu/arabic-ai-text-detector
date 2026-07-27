@@ -17,7 +17,9 @@ def test_cli_json_reads_stdin(monkeypatch, capsys):
 
     data = json.loads(capsys.readouterr().out)
     assert data["word_count"] >= 80
-    assert data["conclusion"]
+    assert data["heuristic"]["conclusion"]
+    assert data["language"] == "en"
+    assert "available" in data["ml"]  # ML layer present/absent depending on optional extra
 
 
 def test_cli_human_report_includes_required_sections(tmp_path, capsys):
@@ -54,4 +56,4 @@ def test_repository_script_wrapper_emits_json(tmp_path):
 
     data = json.loads(completed.stdout)
     assert data["word_count"] >= 80
-    assert "score" in data
+    assert "score" in data["heuristic"]

@@ -18,7 +18,9 @@ It is designed for:
 - forum posts
 - other prose where a user asks whether the writing may be AI-generated
 
-This skill returns a risk estimate, not proof of authorship.
+This skill returns a risk estimate, not proof of authorship. It supports both Arabic and
+English text, and combines two independent layers: rule-based heuristics (always available)
+and an optional local ML classifier (`--no-ml` to skip it).
 
 ## Trigger Conditions
 
@@ -60,22 +62,25 @@ or from the repository helper:
 python scripts/detect.py path/to/text.txt --json
 ```
 
-5. Parse the JSON result and validate that it includes:
+5. Parse the JSON result. It is a combined report - see [references/api-reference.md](./references/api-reference.md)
+   for the full contract - and validate that it includes:
 
-- `score`
-- `confidence`
-- `verdict`
-- `conclusion`
-- `signals`
+- `language`
+- `heuristic.score`, `heuristic.confidence`, `heuristic.verdict`, `heuristic.conclusion`, `heuristic.signals`
+- `ml.available`, and when `true`, `ml.label` / `ml.ai_probability`
+- `agreement`, `summary`
 - `caveats`
 
 6. Respond in this order:
 
-1. One-sentence conclusion with uncertainty.
-2. Score and confidence.
-3. Strongest evidence signals.
-4. Caveats.
-5. Next steps only when useful.
+1. One-sentence `summary` with uncertainty (this already reflects both layers).
+2. `heuristic.score`/`confidence` and, if `ml.available`, the ML layer's label and probability.
+3. Strongest evidence signals from `heuristic.signals`.
+4. `caveats`.
+5. Next steps only when useful (`heuristic.next_steps`).
+
+If the two layers disagree (`agreement == "layers_disagree"`), say so explicitly rather than
+picking one layer's number to lead with.
 
 ## Output Guidance
 

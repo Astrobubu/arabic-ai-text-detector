@@ -5,17 +5,35 @@ import re
 import statistics
 import zlib
 
-_AI_MARKERS = [
+_EN_AI_MARKERS = [
     r"\bas an ai\b", r"\bi cannot\b", r"\bit is important to note\b",
     r"\bdelve\b", r"\bnuanced\b", r"\btestament to\b", r"\bunlock\b",
     r"\bcomprehensive\b", r"\bin conclusion\b", r"\boverall\b",
     r"\bnot only .* but also\b", r"\bwhile .* it is also\b",
 ]
 
-_TRANSITIONS = [
+_EN_TRANSITIONS = [
     "first", "second", "third", "moreover", "furthermore", "however", "therefore",
     "ultimately", "additionally", "in summary", "in conclusion", "on the other hand",
 ]
+
+# Common formulaic phrases seen in Arabic LLM output (ChatGPT/Jais/ALLaM-style responses).
+_AR_AI_MARKERS = [
+    r"من الجدير بالذكر", r"تجدر الإشارة إلى", r"يجدر بالذكر", r"من المهم أن نلاحظ",
+    r"في الختام", r"في الخاتمة", r"في نهاية المطاف", r"خلاصة القول", r"لا شك أن",
+    r"يمكن القول إن", r"بصفتي نموذجا لغويا", r"بصفتي ذكاء اصطناعيا", r"كنموذج لغوي",
+    r"لا تتردد في", r"آمل أن يكون هذا مفيدا", r"جدير بالذكر أن", r"بشكل عام",
+]
+
+_AR_TRANSITIONS = [
+    "أولاً", "أولا", "ثانياً", "ثانيا", "ثالثاً", "ثالثا", "علاوة على ذلك",
+    "بالإضافة إلى ذلك", "ومع ذلك", "لذلك", "في النهاية", "من ناحية أخرى",
+    "باختصار", "في الختام", "في الخاتمة",
+]
+
+_ARABIC_CHAR_RE = re.compile("[؀-ۿݐ-ݿ]")
+_LATIN_CHAR_RE = re.compile(r"[A-Za-z]")
+
 
 @dataclass(frozen=True)
 class Signal:
@@ -24,11 +42,13 @@ class Signal:
     weight: float
     note: str
 
+
 @dataclass(frozen=True)
 class DetectionResult:
     score: int
     verdict: str
     confidence: str
+    language: str
     word_count: int
     conclusion: str
     signals: list[Signal]
@@ -48,12 +68,27 @@ class DetectionResult:
         )[:limit]
 
 
+def detect_language(text: str) -> str:
+    """Return 'ar', 'en', 'mixed', or 'unknown' based on script composition."""
+    arabic_chars = len(_ARABIC_CHAR_RE.findall(text))
+    latin_chars = len(_LATIN_CHAR_RE.findall(text))
+    total = arabic_chars + latin_chars
+    if total == 0:
+        return "unknown"
+    ratio = arabic_chars / total
+    if ratio >= 0.6:
+        return "ar"
+    if ratio <= 0.15:
+        return "en"
+    return "mixed"
+
+
 def _sentences(text: str) -> list[str]:
-    return [s.strip() for s in re.split(r"(?<=[.!?。！？])\s+|[\n]+", text) if s.strip()]
+    return [s.strip() for s in re.split(r"(?<=[.!?؟。！？])\s+|[\n]+", text) if s.strip()]
 
 
 def _words(text: str) -> list[str]:
-    return re.findall(r"[A-Za-z][A-Za-z'\-]*|[\u4e00-\u9fff]", text.lower())
+    return re.findall(r"[A-Za-z][A-Za-z'\-]*|[一-鿿]|[؀-ۿݐ-ݿ]+", text.lower())
 
 
 def _clamp01(x: float) -> float:
@@ -79,13 +114,15 @@ def _score_to_conclusion(verdict: str, score: int, confidence: str) -> str:
 
 
 def analyze_text(text: str) -> DetectionResult:
-    """Analyze text for AI-like writing signals.
+    """Analyze text for AI-like writing signals (rule-based heuristics, Layer 1).
 
-    This is not a forensic detector. It returns a risk estimate with evidence so an
-    agent can review, ask better questions, and avoid overclaiming.
+    Supports Arabic and English (and mixed) text. This is not a forensic detector.
+    It returns a risk estimate with evidence so an agent or reviewer can inspect,
+    ask better questions, and avoid overclaiming.
     """
     raw = text or ""
     normalized = re.sub(r"\s+", " ", raw).strip()
+    language = detect_language(normalized)
     words = _words(normalized)
     sentences = _sentences(raw)
     word_count = len(words)
@@ -96,6 +133,7 @@ def analyze_text(text: str) -> DetectionResult:
             score=0,
             verdict=verdict,
             confidence="low",
+            language=language,
             word_count=word_count,
             conclusion=_score_to_conclusion(verdict, 0, "low"),
             signals=[],
@@ -103,14 +141,21 @@ def analyze_text(text: str) -> DetectionResult:
             next_steps=["Ask for a longer sample before drawing any conclusion."],
         )
 
+    if language == "ar":
+        markers, transitions = _AR_AI_MARKERS, _AR_TRANSITIONS
+    elif language == "en":
+        markers, transitions = _EN_AI_MARKERS, _EN_TRANSITIONS
+    else:
+        markers, transitions = _AR_AI_MARKERS + _EN_AI_MARKERS, _AR_TRANSITIONS + _EN_TRANSITIONS
+
     sentence_lengths = [max(1, len(_words(s))) for s in sentences] or [word_count]
     avg_len = statistics.mean(sentence_lengths)
     stdev_len = statistics.pstdev(sentence_lengths) if len(sentence_lengths) > 1 else 0.0
     burstiness = stdev_len / avg_len if avg_len else 0.0
 
     unique_ratio = len(set(words)) / word_count
-    marker_hits = sum(1 for p in _AI_MARKERS if re.search(p, normalized, re.I | re.S))
-    transition_hits = sum(normalized.lower().count(t) for t in _TRANSITIONS)
+    marker_hits = sum(1 for p in markers if re.search(p, normalized, re.I | re.S))
+    transition_hits = sum(normalized.lower().count(t.lower()) for t in transitions)
 
     listish_lines = len(re.findall(r"(?m)^\s*(?:[-*•]|\d+[.)])\s+", raw))
     headingish_lines = len(re.findall(r"(?m)^\s{0,3}#{1,3}\s+|^\s{0,3}[A-Z][A-Za-z ]{3,}:\s*$", raw))
@@ -125,7 +170,7 @@ def analyze_text(text: str) -> DetectionResult:
     ))
     signals.append(Signal(
         "formulaic_markers", _clamp01(marker_hits / 5), 0.22,
-        f"Matched {marker_hits} common AI-like phrase patterns.",
+        f"Matched {marker_hits} common AI-like phrase patterns ({language}).",
     ))
     signals.append(Signal(
         "transition_density", _clamp01((transition_hits / max(1, word_count)) * 55), 0.14,
@@ -165,6 +210,7 @@ def analyze_text(text: str) -> DetectionResult:
         score=score,
         verdict=verdict,
         confidence=confidence,
+        language=language,
         word_count=word_count,
         conclusion=_score_to_conclusion(verdict, score, confidence),
         signals=signals,

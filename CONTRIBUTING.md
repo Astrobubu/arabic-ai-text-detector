@@ -21,8 +21,9 @@ Keep the project small, explainable, and honest.
 ## Avoid
 
 - Claims of forensic certainty
-- Hidden network calls
-- Heavy dependencies without a strong reason
+- Hidden network calls (the optional ML/docs/server extras are opt-in and documented in
+  `docs/LEGAL_USE.md` - they must stay fully offline after the one-time model download)
+- Heavy dependencies without a strong reason, and never make them required for Layer 1
 - Features that encourage accusations or disciplinary decisions
 - Output wording that frames scores as proof
 

@@ -1,2 +1,4 @@
 # Runtime dependencies are defined in pyproject.toml.
-# This project currently uses only the Python standard library at runtime.
+# Layer 1 (heuristics) uses only the Python standard library at runtime.
+# Layer 2 (local ML classifier), document upload, and the desktop backend
+# server are optional extras: pip install -e ".[ml,docs,server]" or ".[all]"
